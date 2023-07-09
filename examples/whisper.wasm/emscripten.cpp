@@ -66,15 +66,45 @@ EMSCRIPTEN_BINDINGS(whisper) {
 
         struct whisper_full_params params = whisper_full_default_params(whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY);
 
-        params.print_realtime   = true;
+        params.print_realtime   = false;
+        params.print_timestamps = false;
         params.token_timestamps = max_len > 0; // required for `max_len`
         params.max_len          = max_len ? max_len : 0;
-        params.print_timestamps = true;
-        params.print_special    = false;
+        params.print_special    = whisper_is_multilingual(g_contexts[index]);
         params.translate        = translate;
         params.language         = whisper_is_multilingual(g_contexts[index]) ? lang.c_str() : "en";
         params.n_threads        = std::min(nthreads, std::min(16, mpow2(std::thread::hardware_concurrency())));
         params.offset_ms        = 0;
+        params.single_segment   = false;
+
+        // this callback is called on each new segment
+        if (!params.print_realtime) {
+            params.new_segment_callback_user_data = nullptr;
+            params.new_segment_callback           = [](struct whisper_context * ctx, struct whisper_state * /*state*/, int n_new, void * user_data) {
+                const int n_segments = whisper_full_n_segments(ctx);
+
+                int64_t t0 = 0;
+                int64_t t1 = 0;
+
+                // print the last n_new segments
+                const int s0 = n_segments - n_new;
+
+                if (s0 == 0) {
+                    printf("\n");
+                }
+
+                for (int i = s0; i < n_segments; i++) {
+                    for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
+                        const char * text = whisper_full_get_token_text(ctx, i, j);
+                        const float  p    = whisper_full_get_token_p   (ctx, i, j);
+
+                        printf("text: %s; token.p: %f\n", text, p);
+                    }
+                    fflush(stdout);
+                }
+            };
+        }
+
 
         std::vector<float> pcmf32;
         const int n = audio["length"].as<int>();
