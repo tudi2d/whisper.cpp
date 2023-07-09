@@ -8,6 +8,7 @@
 
 std::thread g_worker;
 
+std::vector<std::vector<std::string>> result;
 std::vector<struct whisper_context *> g_contexts(4, nullptr);
 
 static inline int mpow2(int n) {
@@ -48,8 +49,7 @@ EMSCRIPTEN_BINDINGS(whisper) {
             g_contexts[index] = nullptr;
         }
     }));
-
-    emscripten::function("full_default", emscripten::optional_override([](size_t index, const emscripten::val & audio, const std::string & lang, int nthreads, bool translate) {
+    emscripten::function("full_default", emscripten::optional_override([](size_t index, const emscripten::val & audio, const std::string & lang, int nthreads, bool translate, int max_len) {
         if (g_worker.joinable()) {
             g_worker.join();
         }
@@ -67,7 +67,8 @@ EMSCRIPTEN_BINDINGS(whisper) {
         struct whisper_full_params params = whisper_full_default_params(whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY);
 
         params.print_realtime   = true;
-        params.print_progress   = false;
+        params.token_timestamps = max_len > 0; // required for `max_len`
+        params.max_len          = max_len ? max_len : 0;
         params.print_timestamps = true;
         params.print_special    = false;
         params.translate        = translate;
@@ -91,11 +92,13 @@ EMSCRIPTEN_BINDINGS(whisper) {
             printf("system_info: n_threads = %d / %d | %s\n",
                     params.n_threads, std::thread::hardware_concurrency(), whisper_print_system_info());
 
-            printf("%s: processing %d samples, %.1f sec, %d threads, %d processors, lang = %s, task = %s ...\n",
+            printf("%s: processing %d samples, %.1f sec, %d threads, %d processors, lang = %s, task = %s ..., max_len = %d\n",
                     __func__, int(pcmf32.size()), float(pcmf32.size())/WHISPER_SAMPLE_RATE,
                     params.n_threads, 1,
                     params.language,
-                    params.translate ? "translate" : "transcribe");
+                    params.translate ? "translate" : "transcribe",
+                    params.max_len
+                    );
 
             printf("\n");
         }
@@ -105,6 +108,26 @@ EMSCRIPTEN_BINDINGS(whisper) {
             g_worker = std::thread([index, params, pcmf32 = std::move(pcmf32)]() {
                 whisper_reset_timings(g_contexts[index]);
                 whisper_full(g_contexts[index], params, pcmf32.data(), pcmf32.size());
+
+                const int n_segments = whisper_full_n_segments(g_contexts[index]);
+                printf("n_segments: %d\n", n_segments);
+                for (int i = 0; i < n_segments; ++i) {
+                    const char * text = whisper_full_get_segment_text(g_contexts[index], i);
+
+                    int prob_n = 0;
+                    float prob = 0.0f;
+
+                    // n_tokens = 1 for max_len = 1
+                    const int n_tokens = whisper_full_n_tokens(g_contexts[index], i);
+                    for (int j = 0; j < n_tokens; ++j) {
+                        const auto token = whisper_full_get_token_data(g_contexts[index], i, j);
+                        prob += token.p;
+                        ++prob_n;
+                    }
+
+                    printf("text: %s; token.p: %f\n", text, prob/prob_n);
+                }
+                
                 whisper_print_timings(g_contexts[index]);
             });
         }
