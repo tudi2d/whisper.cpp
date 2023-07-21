@@ -11,6 +11,23 @@ std::thread g_worker;
 std::vector<std::vector<std::string>> result;
 std::vector<struct whisper_context *> g_contexts(4, nullptr);
 
+//  500 -> 00:05.000
+// 6000 -> 01:00.000
+std::string to_timestamp(int64_t t, bool comma = false) {
+    int64_t msec = t * 10;
+    int64_t hr = msec / (1000 * 60 * 60);
+    msec = msec - hr * (1000 * 60 * 60);
+    int64_t min = msec / (1000 * 60);
+    msec = msec - min * (1000 * 60);
+    int64_t sec = msec / 1000;
+    msec = msec - sec * 1000;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d%s%03d", (int) hr, (int) min, (int) sec, comma ? "," : ".", (int) msec);
+
+    return std::string(buf);
+}
+
 static inline int mpow2(int n) {
     int p = 1;
     while (p <= n) p *= 2;
@@ -67,15 +84,15 @@ EMSCRIPTEN_BINDINGS(whisper) {
         struct whisper_full_params params = whisper_full_default_params(whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY);
 
         params.print_realtime   = false;
-        params.print_timestamps = false;
-        params.token_timestamps = max_len > 0; // required for `max_len`
-        params.max_len          = max_len ? max_len : 0;
-        params.print_special    = whisper_is_multilingual(g_contexts[index]);
+        params.print_timestamps = true;
+        params.token_timestamps = true; // required for `max_len`
+        params.max_len          = 1;
+        params.print_special    = false;
         params.translate        = translate;
         params.language         = whisper_is_multilingual(g_contexts[index]) ? lang.c_str() : "en";
         params.n_threads        = std::min(nthreads, std::min(16, mpow2(std::thread::hardware_concurrency())));
         params.offset_ms        = 0;
-        params.single_segment   = false;
+        params.split_on_word    = true;
 
         // this callback is called on each new segment
         if (!params.print_realtime) {
@@ -94,13 +111,19 @@ EMSCRIPTEN_BINDINGS(whisper) {
                 }
 
                 for (int i = s0; i < n_segments; i++) {
+                    t0 = whisper_full_get_segment_t0(ctx, i);
+                    t1 = whisper_full_get_segment_t1(ctx, i);
+                    printf("[%s --> %s]  ", to_timestamp(t0).c_str(), to_timestamp(t1).c_str());
+                    printf("\n");
+                
                     for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
                         const char * text = whisper_full_get_token_text(ctx, i, j);
-                        const float  p    = whisper_full_get_token_p   (ctx, i, j);
+                        const float  p     = whisper_full_get_token_p(ctx, i, j);
 
                         printf("text: %s; token.p: %f\n", text, p);
                     }
-                    fflush(stdout);
+
+                    printf("\n");
                 }
             };
         }
