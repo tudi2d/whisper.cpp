@@ -29,11 +29,16 @@ if (WHISPER_WASM_SINGLE_FILE)
 endif()
 
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
+    --profiling \
+    -std=c++11 \
+    -flto \
+    -O3 \
     --bind \
     -s USE_PTHREADS=1 \
     -s PTHREAD_POOL_SIZE_STRICT=0 \
-    -s INITIAL_MEMORY=2000MB \
-    -s TOTAL_MEMORY=2000MB \
+    -s INITIAL_MEMORY=4000MB \
+    -s TOTAL_MEMORY=4000MB \
+    -s ALLOW_MEMORY_GROWTH=0 \
     -s FORCE_FILESYSTEM=1 \
     -s EXPORTED_RUNTIME_METHODS=\"['print', 'printErr', 'ccall', 'cwrap']\" \
     ${EXTRA_FLAGS} \
@@ -44,6 +49,3 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
 #
 
 set(TARGET whisper.wasm)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/index.html @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../helpers.js    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/helpers.js @ONLY)
