@@ -29,16 +29,14 @@ if (WHISPER_WASM_SINGLE_FILE)
 endif()
 
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
-    --profiling \
     -std=c++11 \
     -flto \
     -O3 \
     --bind \
     -s USE_PTHREADS=1 \
     -s PTHREAD_POOL_SIZE_STRICT=0 \
-    -s INITIAL_MEMORY=4000MB \
-    -s TOTAL_MEMORY=4000MB \
-    -s ALLOW_MEMORY_GROWTH=0 \
+    -s INITIAL_MEMORY=1024MB \
+    -s TOTAL_MEMORY=1024MB \
     -s FORCE_FILESYSTEM=1 \
     -s EXPORTED_RUNTIME_METHODS=\"['print', 'printErr', 'ccall', 'cwrap']\" \
     ${EXTRA_FLAGS} \
