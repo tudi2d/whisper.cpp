@@ -131,6 +131,7 @@ EMSCRIPTEN_BINDINGS(whisper) {
 
         pcmf32.resize(n);
 
+        // TODO: Why do you need this? Does this assign the data from audio to pcmf32?!:/
         emscripten::val memoryView = audio["constructor"].new_(memory, reinterpret_cast<uintptr_t>(pcmf32.data()), n);
         memoryView.call<void>("set", audio);
 
