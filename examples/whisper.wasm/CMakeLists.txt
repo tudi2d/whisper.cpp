@@ -28,6 +28,7 @@ if (WHISPER_WASM_SINGLE_FILE)
         )
 endif()
 
+# Build flags: Enforces optimisation with `-O3` improving runtime performance
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
     -std=c++11 \
     -flto \
