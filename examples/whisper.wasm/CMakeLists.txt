@@ -34,6 +34,7 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
     -flto \
     -O3 \
     --bind \
+    -s ENVIRONMENT=\"web,worker\" \
     -s USE_PTHREADS=1 \
     -s PTHREAD_POOL_SIZE_STRICT=0 \
     -s INITIAL_MEMORY=2GB \
