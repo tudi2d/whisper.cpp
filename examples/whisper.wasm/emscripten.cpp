@@ -120,7 +120,7 @@ EMSCRIPTEN_BINDINGS(whisper) {
         params.max_len          = max_len;
         params.print_special    = false;
         params.translate        = translate;
-        params.language         = whisper_is_multilingual(g_contexts[index]) ? lang.c_str() : "en";
+        params.language         = "auto";
         params.n_threads        = std::min(nthreads, std::min(16, mpow2(std::thread::hardware_concurrency())));
         params.offset_ms        = 0;
         params.split_on_word    = true;
@@ -152,7 +152,7 @@ EMSCRIPTEN_BINDINGS(whisper) {
                         const char * text = whisper_full_get_token_text(ctx, i, j);
 
                         // Token precision 
-                        const float  p     = whisper_full_get_token_p(ctx, i, j);
+                        const float p     = whisper_full_get_token_p(ctx, i, j);
 
                         printf("TEXT##%s##%f\n", text, p);
                     }
