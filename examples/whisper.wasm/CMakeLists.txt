@@ -30,15 +30,17 @@ endif()
 
 # Build flags: Enforces optimisation with `-O3` improving runtime performance
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
-    -std=c++14 \
+    -std=c++11 \
     -flto \
     -O3 \
     --bind \
     -s ENVIRONMENT=\"web,worker\" \
     -s USE_PTHREADS=1 \
+    -s PTHREAD_POOL_SIZE=8 \
     -s PTHREAD_POOL_SIZE_STRICT=0 \
-    -s INITIAL_MEMORY=2GB \
-    -s TOTAL_MEMORY=2GB \
+    -s INITIAL_MEMORY=512MB \
+    -s MAXIMUM_MEMORY=2GB \
+    -s ALLOW_MEMORY_GROWTH=1 \
     -s FORCE_FILESYSTEM=1 \
     -s EXPORTED_RUNTIME_METHODS=\"['print', 'printErr', 'ccall', 'cwrap']\" \
     ${EXTRA_FLAGS} \

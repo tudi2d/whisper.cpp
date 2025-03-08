@@ -5,8 +5,10 @@
 
 #include <vector>
 #include <thread>
+#include <atomic>
 
 std::thread g_worker;
+std::atomic<bool> g_processing{false};
 
 std::vector<std::vector<std::string>> result;
 std::vector<struct whisper_context *> g_contexts(4, nullptr);
@@ -82,6 +84,14 @@ EMSCRIPTEN_BINDINGS(whisper) {
         }
     }));
 
+    /**
+     * Check if a transcription is currently in progress.
+     * 
+     * @return True if processing, false otherwise.
+     */
+    emscripten::function("is_processing", emscripten::optional_override([]() {
+        return g_processing.load();
+    }));
 
     /**
      * Run initialized Whisper model on input audio with given parameters.
@@ -96,6 +106,10 @@ EMSCRIPTEN_BINDINGS(whisper) {
      * @return 0 if transcription was started successfully, -1 if the context index is out of range, -2 if the context at the given index is null.
      */
     emscripten::function("full_default", emscripten::optional_override([](size_t index, const emscripten::val & audio, const std::string & lang, int nthreads, bool translate, int max_len, bool tdrz) {
+        if (g_processing.load()) {
+            return -3; // Already processing
+        }
+        
         if (g_worker.joinable()) {
             g_worker.join();
         }
@@ -120,7 +134,7 @@ EMSCRIPTEN_BINDINGS(whisper) {
         params.max_len          = max_len;
         params.print_special    = false;
         params.translate        = translate;
-        params.language         = "auto";
+        params.language         = lang == "auto" ? "auto" : lang.c_str();
         params.n_threads        = std::min(nthreads, std::min(16, mpow2(std::thread::hardware_concurrency())));
         params.offset_ms        = 0;
         params.split_on_word    = true;
@@ -160,27 +174,36 @@ EMSCRIPTEN_BINDINGS(whisper) {
             };
         }
 
-        // Parse the Float32Array audio data to `pcmf32` for compatibiliy
-
-        std::vector<float> pcmf32;
+        // Get audio data length and check validity
         const int n = audio["length"].as<int>();
-
-        emscripten::val heap = emscripten::val::module_property("HEAPU8");
-        emscripten::val memory = heap["buffer"];
-
-        pcmf32.resize(n);
-
-        emscripten::val memoryView = audio["constructor"].new_(memory, reinterpret_cast<uintptr_t>(pcmf32.data()), n);
-        memoryView.call<void>("set", audio);
+        
+        // Safety check - the JS array size must be valid
+        if (n <= 0 || n > 16000 * 3600) {  // Max 1 hour of audio at 16kHz
+            printf("Invalid audio length: %d\n", n);
+            return -4;
+        }
+        
+        // Safely copy the Float32Array from JS to C++
+        std::vector<float> pcmf32(n);
+        
+        try {
+            // Use a safer approach to copy audio data - iterate through the array
+            for (int i = 0; i < n; ++i) {
+                pcmf32[i] = audio[i].as<float>();
+            }
+        } catch (const std::exception& e) {
+            printf("Error copying audio data: %s\n", e.what());
+            return -5;
+        }
 
         // print system information
         {
             printf("system_info: n_threads = %d / %d | %s\n",
                     params.n_threads, std::thread::hardware_concurrency(), whisper_print_system_info());
 
-            printf("%s: processing %d samples, %.1f sec, %d threads, %d processors, lang = %s, task = %s ..., max_len = %d\n",
+            printf("%s: processing %d samples, %.1f sec, %d threads, lang = %s, task = %s ..., max_len = %d\n",
                     __func__, int(pcmf32.size()), float(pcmf32.size())/WHISPER_SAMPLE_RATE,
-                    params.n_threads, 1,
+                    params.n_threads,
                     params.language,
                     params.translate ? "translate" : "transcribe",
                     params.max_len
@@ -188,15 +211,16 @@ EMSCRIPTEN_BINDINGS(whisper) {
         }
 
         // run the worker
-        {
-            g_worker = std::thread([index, params, pcmf32 = std::move(pcmf32)]() {
-                whisper_reset_timings(g_contexts[index]);
-                // run whisper model
-                whisper_full(g_contexts[index], params, pcmf32.data(), pcmf32.size());
-                whisper_print_timings(g_contexts[index]);
-                printf("DONE##");
-            });
-        }
+        g_processing = true;
+        auto pcmf32_copy = std::move(pcmf32);
+        g_worker = std::thread([index, params, pcmf32_copy]() {
+            whisper_reset_timings(g_contexts[index]);
+            // run whisper model
+            whisper_full(g_contexts[index], params, pcmf32_copy.data(), pcmf32_copy.size());
+            whisper_print_timings(g_contexts[index]);
+            printf("DONE##");
+            g_processing = false;
+        });
 
         return 0;
     }));
