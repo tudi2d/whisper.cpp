@@ -10,24 +10,24 @@ on:
       - whisper.h
 
 jobs:
-  addon_node-ubuntu-latest:
-    runs-on: ubuntu-latest
+  addon_node-ubuntu-22:
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         node-version: [ 16.x, 18.x ]
     steps:
       - name: Clone
-        uses: actions/checkout@v1
+        uses: actions/checkout@v6
 
       - name: Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install build-essential
+          sudo apt-get install build-essential git
           sudo apt-get install cmake
           sudo apt-get install libsdl2-dev
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
